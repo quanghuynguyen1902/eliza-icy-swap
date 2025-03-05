@@ -10,7 +10,8 @@ import {
 } from "@elizaos/core";
 import { initWalletProvider, type WalletProvider } from "../providers/wallet";
 import { checkBalanceTemplate } from "../templates";
-import { TokenService, type CheckBalanceParams } from "../services/services";
+import { TokenService } from "../services";
+import { CheckBalanceParams } from "../types";
 
 export class CheckERC20BalanceAction {
     constructor(private tokenService: TokenService) {}

@@ -28,26 +28,50 @@ If the user doesn't specify a token name, but mentions a common token address:
 Output JSON with "chain" and "tokenAddress" fields.
 `;
 
-export const swapIcyToBtcTemplate = `Given the recent messages and wallet information below:
+export const swapIcyToBtcTemplate = `
+You are an AI assistant helping to extract parameters for an ICY to BTC swap.
 
+First, review the recent messages from the conversation:
+
+<recent_messages>
 {{recentMessages}}
+</recent_messages>
 
-{{walletInfo}}
+Here's a list of supported chains:
+<supported_chains>
+{{supportedChains}}
+</supported_chains>
 
-Extract the following information about the requested swap from ICY to BTC:
-- Amount of ICY to swap (must be a string representing the number without any currency symbol)
-- Chain where the swap should be executed
-- Destination BTC address
+The user wants to swap ICY tokens to BTC on baseSepolia.
 
-Respond with a JSON markdown block containing only the extracted values:
+Extract the following information from the user's message:
+1. The Bitcoin address (btcAddress) where they want to receive BTC
+2. The amount of ICY tokens (icyAmount) they want to swap
 
-\`\`\`json
+Respond with a JSON object in the following format:
 {
-    "inputToken": "ICY",
-    "outputToken": "BTC",
-    "amount": string | null,
-    "chain": "ethereum" | "base" | "sepolia" | "bsc" | "arbitrum" | "avalanche" | "polygon" | "optimism" | "cronos" | "gnosis" | "fantom" | "klaytn" | "celo" | "moonbeam" | "aurora" | "harmonyOne" | "moonriver" | "arbitrumNova" | "mantle" | "linea" | "scroll" | "filecoin" | "taiko" | "zksync" | "canto" | "bitcoin" | null,
-    "toAddress": string | null
+  "btcAddress": "bitcoin address extracted from the message",
+  "icyAmount": "amount of ICY tokens to swap as a string"
 }
-\`\`\`
+
+If any information is missing, you should use reasonable defaults or ask for clarification.
+For Bitcoin addresses, there is no reasonable default - the user must provide a valid BTC address.
+For ICY amount, if not specified, you can default to "1" for 1 ICY token.
+For ICY or icy on base-sepolia, token address is: 0x5233E10cc24736F107fEda42ff0157e91Cf1F8b6
+
+Example user messages and corresponding outputs:
+User: "Swap 10 ICY to my BTC address bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+Output: {"btcAddress": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", "icyAmount": "10"}
+
+User: "Exchange 5.5 ICY tokens for Bitcoin at 3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+Output: {"btcAddress": "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "icyAmount": "5.5"}
+
+User: "Send some ICY to my BTC wallet 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+Output: {"btcAddress": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "icyAmount": "1"}
+
+User: "swap 20 icy to btc address tb1qf06am7xd4tpmnuuw92rgtr48jzq84vr3ykp9hd"
+Output: {"btcAddress": "tb1qf06am7xd4tpmnuuw92rgtr48jzq84vr3ykp9hd", "icyAmount": "20"}
+
+User message to extract information from:
+{text}
 `;
