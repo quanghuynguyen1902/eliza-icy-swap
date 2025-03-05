@@ -1,12 +1,9 @@
 import { formatUnits } from "viem";
-import { TokenBalance, SupportedChain } from "../types";
+import { TokenBalance, CheckBalanceParams } from "../types";
 import { type WalletProvider } from "../providers/wallet";
 
 // Define params interface for the check ERC20 balance action
-export interface CheckBalanceParams {
-    chain: SupportedChain;
-    tokenAddress: `0x${string}`; // Contract address of the ERC20 token
-}
+
 
 // ABI for ERC20 balanceOf function
 const erc20ABI = [
@@ -48,7 +45,6 @@ export class TokenService {
         this.walletProvider.switchChain(params.chain);
         const publicClient = this.walletProvider.getPublicClient(params.chain);
         const chain = this.walletProvider.getCurrentChain();
-        console.log(params.tokenAddress);
         const walletAddress = this.walletProvider.getAddress();
 
         try {
@@ -91,6 +87,7 @@ export class TokenService {
                 tokenName: name as string,
                 chain: params.chain,
                 chainId: chain.id,
+                decimals: decimals as number,
                 tokenAddress: params.tokenAddress
             };
         } catch (error) {

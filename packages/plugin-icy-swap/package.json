@@ -24,6 +24,7 @@
     },
     "dependencies": {
         "@elizaos/core": "workspace:*",
+        "axios": "^1.8.1",
         "viem": "2.22.2"
     },
     "peerDependencies": {
