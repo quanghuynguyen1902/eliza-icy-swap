@@ -16,6 +16,7 @@ export interface TokenBalance {
 }
 
 export interface CheckBalanceParams {
+    walletAddress?: string;
     chain: SupportedChain;
     tokenAddress: `0x${string}`; // Contract address of the ERC20 token
 }

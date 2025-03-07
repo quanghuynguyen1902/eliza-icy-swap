@@ -230,6 +230,9 @@ export class DirectClient {
                     return;
                 }
 
+                const walletAddress = req.body.walletAddress || "";
+                runtime.walletAddress = walletAddress;
+
                 const messageId = stringToUuid(Date.now().toString());
 
                 const attachments: Media[] = [];

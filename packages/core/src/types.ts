@@ -1271,6 +1271,7 @@ export interface IAgentRuntime {
     // Properties
     agentId: UUID;
     serverUrl: string;
+    walletAddress: string;
     databaseAdapter: IDatabaseAdapter;
     token: string | null;
     modelProvider: ModelProviderName;

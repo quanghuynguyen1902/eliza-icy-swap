@@ -24,7 +24,6 @@ import type {
     HttpTransport,
     Account,
     PrivateKeyAccount,
-    TestClient,
 } from "viem";
 import * as viemChains from "viem/chains";
 import NodeCache from "node-cache";
@@ -45,7 +44,6 @@ export class WalletProvider {
         private cacheManager: ICacheManager,
         chains?: Record<string, Chain>
     ) {
-        this.setAccount(accountOrPrivateKey);
         this.setChains(chains);
 
         if (chains && Object.keys(chains).length > 0) {
@@ -193,16 +191,6 @@ export class WalletProvider {
         // Write to file-based cache
         await this.writeToCache(cacheKey, data);
     }
-
-    private setAccount = (
-        accountOrPrivateKey: PrivateKeyAccount | `0x${string}`
-    ) => {
-        if (typeof accountOrPrivateKey === "string") {
-            this.account = privateKeyToAccount(accountOrPrivateKey);
-        } else {
-            this.account = accountOrPrivateKey;
-        }
-    };
 
     private setChains = (chains?: Record<string, Chain>) => {
         if (!chains) {

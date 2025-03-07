@@ -17,12 +17,13 @@ import { Avatar, AvatarImage } from "./ui/avatar";
 import CopyButton from "./copy-button";
 import ChatTtsButton from "./ui/chat/chat-tts-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { useToast } from "@/hooks/use-toast";
 import AIWriter from "react-aiwriter";
 import type { IAttachment } from "@/types";
 import { AudioRecorder } from "./audio-recorder";
 import { Badge } from "./ui/badge";
 import { useAutoScroll } from "./ui/chat/hooks/useAutoScroll";
+import { useWallet } from "@/hooks/use-wallet";
+import { useSendTransaction } from 'wagmi';
 
 type ExtraContentFields = {
     user: string;
@@ -37,7 +38,6 @@ type AnimatedDivProps = AnimatedProps<{ style: React.CSSProperties }> & {
 };
 
 export default function Page({ agentId }: { agentId: UUID }) {
-    const { toast } = useToast();
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [input, setInput] = useState("");
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -45,14 +45,17 @@ export default function Page({ agentId }: { agentId: UUID }) {
     const formRef = useRef<HTMLFormElement>(null);
 
     const queryClient = useQueryClient();
+    const { address } = useWallet();
+    const { sendTransactionAsync } = useSendTransaction();
 
     const getMessageVariant = (role: string) =>
         role !== "user" ? "received" : "sent";
 
-    const { scrollRef, isAtBottom, scrollToBottom, disableAutoScroll } = useAutoScroll({
-        smooth: true,
-    });
-   
+    const { scrollRef, isAtBottom, scrollToBottom, disableAutoScroll } =
+        useAutoScroll({
+            smooth: true,
+        });
+
     useEffect(() => {
         scrollToBottom();
     }, [queryClient.getQueryData(["messages", agentId])]);
@@ -68,6 +71,48 @@ export default function Page({ agentId }: { agentId: UUID }) {
             handleSendMessage(e as unknown as React.FormEvent<HTMLFormElement>);
         }
     };
+
+    const handleSwapIcy = async (content: any) => {
+        try {
+            if (!content || !content.transactions || !Array.isArray(content.transactions)) {
+                console.error("Invalid transaction data structure", content);
+                return;
+            }
+
+            const transactions = content.transactions;
+            console.log("Transactions to process:", transactions);
+
+            const TxHashes: string[] = [];
+
+            for (let i = 0; i < transactions.length; i++) {
+                const tx = transactions[i];
+
+                if (!tx || !tx.to || !tx.from || !tx.data) {
+                    console.error(`Skipping transaction ${i}: Missing required fields`, tx);
+                    continue;
+                }
+
+                const txHash =  await sendTransactionAsync({
+                    account: tx.from as `0x${string}`,
+                    to: tx.to as `0x${string}`,
+                    data: tx.data as `0x${string}`,
+                    gas: tx.gas ? BigInt(tx.gas) : undefined,
+                    gasPrice: tx.gasPrice ? BigInt(tx.gasPrice) : undefined,
+                    value: tx.value ? BigInt(tx.value) : BigInt(0),
+                    chainId: tx.chainId ? Number(tx.chainId) : undefined,
+                });
+
+                TxHashes.push(txHash)
+
+            }
+
+            addMessageToUI(`TxHash: ${TxHashes.pop()}`);
+        } catch (error) {
+            console.error("Transaction error:", error);
+            addMessageToUI(`Sorry ser, I can't execute transaction. Please try it one more!`);
+        }
+    };
+
 
     const handleSendMessage = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -119,6 +164,19 @@ export default function Page({ agentId }: { agentId: UUID }) {
         }
     }, []);
 
+    const addMessageToUI = (messageText: string) => {
+        const newMessage = {
+            text: messageText,
+            user: "system",
+            createdAt: Date.now(),
+        };
+
+        queryClient.setQueryData(
+            ["messages", agentId],
+            (old: ContentWithUser[] = []) => [...old, newMessage]
+        );
+    };
+
     const sendMessageMutation = useMutation({
         mutationKey: ["send_message", agentId],
         mutationFn: ({
@@ -127,25 +185,40 @@ export default function Page({ agentId }: { agentId: UUID }) {
         }: {
             message: string;
             selectedFile?: File | null;
-        }) => apiClient.sendMessage(agentId, message, selectedFile),
+        }) => apiClient.sendMessage(agentId, message, address, selectedFile),
         onSuccess: (newMessages: ContentWithUser[]) => {
             queryClient.setQueryData(
                 ["messages", agentId],
-                (old: ContentWithUser[] = []) => [
-                    ...old.filter((msg) => !msg.isLoading),
-                    ...newMessages.map((msg) => ({
-                        ...msg,
-                        createdAt: Date.now(),
-                    })),
-                ]
+                (old: ContentWithUser[] = []) => {
+                    const filteredOld = old.filter((msg) => !msg.isLoading);
+
+                    // Map through new messages and check for SWAP_ICY type
+                    const processedMessages = newMessages.map((msg) => {
+                        const updatedMsg = {
+                            ...msg,
+                            createdAt: Date.now(),
+                        };
+
+                        // Check if this message contains SWAP_ICY content
+                        if (
+                            msg.content &&
+                            typeof msg.content === "object" &&
+                            "type" in msg.content &&
+                            msg.content.type === "SWAP_ICY"
+                        ) {
+                            // Process SWAP_ICY content
+                            handleSwapIcy(msg.content);
+                        }
+
+                        return updatedMsg;
+                    });
+
+                    return [...filteredOld, ...processedMessages];
+                }
             );
         },
         onError: (e) => {
-            toast({
-                variant: "destructive",
-                title: "Unable to send message",
-                description: e.message,
-            });
+            console.log(`Unable to send message: ${e.message}`);
         },
     });
 
@@ -173,7 +246,7 @@ export default function Page({ agentId }: { agentId: UUID }) {
     return (
         <div className="flex flex-col w-full h-[calc(100dvh)] p-4">
             <div className="flex-1 overflow-y-auto">
-                <ChatMessageList 
+                <ChatMessageList
                     scrollRef={scrollRef}
                     isAtBottom={isAtBottom}
                     scrollToBottom={scrollToBottom}
@@ -214,14 +287,18 @@ export default function Page({ agentId }: { agentId: UUID }) {
                                             {/* Attachments */}
                                             <div>
                                                 {message?.attachments?.map(
-                                                    (attachment: IAttachment) => (
+                                                    (
+                                                        attachment: IAttachment
+                                                    ) => (
                                                         <div
                                                             className="flex flex-col gap-1 mt-2"
                                                             key={`${attachment.url}-${attachment.title}`}
                                                         >
                                                             <img
                                                                 alt="attachment"
-                                                                src={attachment.url}
+                                                                src={
+                                                                    attachment.url
+                                                                }
                                                                 width="100%"
                                                                 height="100%"
                                                                 className="w-64 rounded-md"
