@@ -58,7 +58,7 @@ const fetcher = async ({
 
             throw new Error(errorMessage);
         }
-            
+
         return resp.json();
     });
 };
@@ -67,11 +67,16 @@ export const apiClient = {
     sendMessage: (
         agentId: string,
         message: string,
+        walletAddress?: string,
         selectedFile?: File | null
     ) => {
         const formData = new FormData();
         formData.append("text", message);
         formData.append("user", "user");
+
+        if (walletAddress) {
+            formData.append("walletAddress", walletAddress);
+        }
 
         if (selectedFile) {
             formData.append("file", selectedFile);
@@ -106,5 +111,14 @@ export const apiClient = {
             method: "POST",
             body: formData,
         });
+    },
+    getWalletInfo: () => {
+        // This is typically handled client-side through Wagmi hooks
+        // For direct API access, you would use the connected account info
+        const account = window.ethereum?.selectedAddress;
+        return {
+            address: account || null,
+            isConnected: !!account
+        };
     },
 };

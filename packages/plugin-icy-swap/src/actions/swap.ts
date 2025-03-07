@@ -22,21 +22,15 @@ export class SwapIcyToBtcAction {
         private tokenService: TokenService
     ) {}
 
-    async swapIcyToBtc(params: SwapIcyToBtcParams) {
-        return this.icySwapService.swapIcyToBtc(params.btcAddress, params.icyAmount, params.satoshiAmount);
-    }
-
     async checkERC20Balance(params: CheckBalanceParams) {
         return this.tokenService.checkERC20Balance(params);
     }
 }
 
-// These interfaces are now imported from "../types"
-
+// Logic to build swap details from user input
 const buildSwapIcyToBtcDetails = async (
     state: State,
-    runtime: IAgentRuntime,
-    wp: WalletProvider,
+    runtime: IAgentRuntime
 ): Promise<SwapIcyToBtcParams> => {
     // Generate parameters using LLM
     const context = composeContext({
@@ -50,22 +44,27 @@ const buildSwapIcyToBtcDetails = async (
         modelClass: ModelClass.LARGE,
     })) as SwapIcyToBtcParams;
 
-    console.log(`Swap ${swapDetails.icyAmount} ICY tokens to BTC at address ${swapDetails.btcAddress}`);
+    console.log(
+        `Swap ${swapDetails.icyAmount} ICY tokens to BTC at address ${swapDetails.btcAddress}`
+    );
 
     // Validate BTC address (basic validation)
     if (!swapDetails.btcAddress || swapDetails.btcAddress.trim() === "") {
-        throw new Error("Invalid BTC address. Please provide a valid Bitcoin address.");
+        throw new Error(
+            "Invalid BTC address. Please provide a valid Bitcoin address."
+        );
     }
 
     // Validate ICY amount (basic validation)
-    if (!swapDetails.icyAmount || isNaN(Number(swapDetails.icyAmount)) || Number(swapDetails.icyAmount) <= 0) {
-        throw new Error("Invalid ICY amount. Please provide a valid positive number.");
+    if (
+        !swapDetails.icyAmount ||
+        isNaN(Number(swapDetails.icyAmount)) ||
+        Number(swapDetails.icyAmount) <= 0
+    ) {
+        throw new Error(
+            "Invalid ICY amount. Please provide a valid positive number."
+        );
     }
-
-    // Check if the requested amount meets the minimum requirement
-    // if (Number(swapDetails.icyAmount) < MIN_ICY_AMOUNT) {
-    //     throw new Error(`Minimum ICY amount for swapping is ${MIN_ICY_AMOUNT}. You requested to swap ${swapDetails.icyAmount} ICY.`);
-    // }
 
     return swapDetails;
 };
@@ -92,25 +91,28 @@ export const swapIcyToBtcAction: Action = {
         const tokenService = new TokenService(walletProvider);
         const action = new SwapIcyToBtcAction(icySwapService, tokenService);
 
+        // Get the user's wallet address
+        const walletAddress = runtime.walletAddress;
+
         // Get the ICY token address from the swap service
-        const icyTokenAddress = '0x5233E10cc24736F107fEda42ff0157e91Cf1F8b6'; // Using the hardcoded value from IcySwapService
+        const icyTokenAddress = "0x5233E10cc24736F107fEda42ff0157e91Cf1F8b6";
 
         try {
             // Check user's ICY balance first using the provided service method
             const tokenBalanceInfo = await action.checkERC20Balance({
                 chain: "baseSepolia",
-                tokenAddress: icyTokenAddress
+                tokenAddress: icyTokenAddress,
+                walletAddress: walletAddress,
             });
 
             const balanceNum = Number(tokenBalanceInfo.balance);
 
             // Compose swap details context
-            const paramOptions = await buildSwapIcyToBtcDetails(
-                state,
-                runtime,
-                walletProvider
-            );
+            const paramOptions = await buildSwapIcyToBtcDetails(state, runtime);
 
+            console.log("params", paramOptions);
+
+            // Check minimum amount requirement
             if (Number(paramOptions.icyAmount) < MIN_ICY_AMOUNT) {
                 if (callback) {
                     callback({
@@ -121,26 +123,31 @@ export const swapIcyToBtcAction: Action = {
                             minimumRequired: MIN_ICY_AMOUNT,
                             currentBalance: balanceNum,
                             tokenSymbol: tokenBalanceInfo.symbol,
-                            tokenName: tokenBalanceInfo.tokenName
+                            tokenName: tokenBalanceInfo.tokenName,
                         },
                     });
                 }
                 return false;
             }
 
-
             // Ensure the user is not trying to swap more than they have
             if (Number(paramOptions.icyAmount) > balanceNum) {
                 if (callback) {
                     callback({
-                        text: `You requested to swap ${paramOptions.icyAmount} ${tokenBalanceInfo.symbol}, but you only have ${balanceNum.toFixed(2)} ${tokenBalanceInfo.symbol} in your wallet. Please adjust the amount.`,
+                        text: `You requested to swap ${
+                            paramOptions.icyAmount
+                        } ${
+                            tokenBalanceInfo.symbol
+                        }, but you only have ${balanceNum.toFixed(2)} ${
+                            tokenBalanceInfo.symbol
+                        } in your wallet. Please adjust the amount.`,
                         content: {
                             success: false,
                             error: "AMOUNT_EXCEEDS_BALANCE",
                             requestedAmount: Number(paramOptions.icyAmount),
                             currentBalance: balanceNum,
                             tokenSymbol: tokenBalanceInfo.symbol,
-                            tokenName: tokenBalanceInfo.tokenName
+                            tokenName: tokenBalanceInfo.tokenName,
                         },
                     });
                 }
@@ -149,42 +156,69 @@ export const swapIcyToBtcAction: Action = {
 
             // Get swap info to show exchange rate
             const swapInfo = await icySwapService.getSwapInfo();
-            const estimatedSatoshiAmount = await icySwapService.calculateIcyToSatoshi(paramOptions.icyAmount, swapInfo.data.icy_satoshi_rate);
-            paramOptions.satoshiAmount = estimatedSatoshiAmount
+            const estimatedSatoshiAmount = icySwapService.calculateIcyToSatoshi(
+                paramOptions.icyAmount,
+                swapInfo.data.icy_satoshi_rate
+            );
+            paramOptions.satoshiAmount = estimatedSatoshiAmount;
 
-            // Execute the swap
-            const txHash = await action.swapIcyToBtc(paramOptions);
-            const walletAddress = walletProvider.getAddress();
+            const signatureResponse =
+                await icySwapService.generateSwapSignature(
+                    paramOptions.btcAddress,
+                    paramOptions.icyAmount,
+                    paramOptions.satoshiAmount
+                );
+
+            const txApprove = await icySwapService.buildApproveTokenTx(
+                signatureResponse.data.icy_amount,
+                walletAddress
+            );
+
+            const txSwap = await icySwapService.buildSwapTokenTx(
+                {
+                    icyAmount: signatureResponse.data.icy_amount,
+                    btcAddress: paramOptions.btcAddress,
+                    btcAmount: signatureResponse.data.btc_amount,
+                    nonce: signatureResponse.data.nonce,
+                    deadline: signatureResponse.data.deadline,
+                    signature: signatureResponse.data.signature,
+                },
+                walletAddress
+            );
+
+            const transactions = [txApprove, txSwap];
 
             if (callback) {
                 callback({
-                    text: `Successfully initiated swap of ${paramOptions.icyAmount} ICY tokens to approximately ${Number(estimatedSatoshiAmount)} Satoshi. The BTC will be sent to ${paramOptions.btcAddress}. Transaction hash: ${txHash}`,
+                    text: `Prepared swap transaction of ${
+                        paramOptions.icyAmount
+                    } ICY tokens to approximately ${Number(
+                        Number(estimatedSatoshiAmount) -
+                            Number(swapInfo.data.min_satoshi_fee)
+                    )} Satoshi. The BTC will be sent to ${
+                        paramOptions.btcAddress
+                    } after you approve and sign the transactions.`,
                     content: {
                         success: true,
-                        walletAddress: walletAddress,
-                        icyAmount: paramOptions.icyAmount,
-                        btcAddress: paramOptions.btcAddress,
-                        estimatedSatoshiAmount: estimatedSatoshiAmount,
-                        txHash: txHash,
-                        exchangeRate: swapInfo.data.icy_satoshi_rate
+                        transactions: transactions,
+                        type: "SWAP_ICY",
                     },
                 });
             }
             return true;
         } catch (error) {
-            console.error("Error swapping ICY to BTC:", error);
+            console.error("Error preparing ICY to BTC swap:", error);
             if (callback) {
                 callback({
-                    text: `${error.message}`,
+                    text: `Sorry ser, I can't execute your query. Please try again`,
                     content: { error: error.message },
                 });
             }
             return false;
         }
     },
-    validate: async (runtime: IAgentRuntime) => {
-        const privateKey = runtime.getSetting("EVM_PRIVATE_KEY");
-        return typeof privateKey === "string" && privateKey.startsWith("0x");
+    validate: async (_runtime: IAgentRuntime) => {
+        return true
     },
     examples: [
         [
@@ -234,7 +268,6 @@ export const swapIcyToBtcAction: Action = {
                     action: "SWAP_ICY_TO_BTC",
                 },
             },
-
         ],
         [
             {
@@ -251,7 +284,6 @@ export const swapIcyToBtcAction: Action = {
                     action: "SWAP_ICY_TO_BTC",
                 },
             },
-
         ],
     ],
     similes: ["SWAP_ICY", "EXCHANGE_ICY", "ICY_TO_BTC", "CONVERT_ICY"],

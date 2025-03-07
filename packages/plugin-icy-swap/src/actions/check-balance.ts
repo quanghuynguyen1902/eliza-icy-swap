@@ -41,6 +41,8 @@ const buildCheckBalanceDetails = async (
         modelClass: ModelClass.LARGE,
     })) as CheckBalanceParams;
 
+    checkBalanceDetails.walletAddress = runtime.walletAddress;
+
     console.log(`Check balance for token ${checkBalanceDetails.tokenAddress} on chain ${checkBalanceDetails.chain}`);
 
     const existingChain = wp.chains[checkBalanceDetails.chain];
@@ -87,7 +89,7 @@ export const checkBalanceAction: Action = {
 
         try {
             const balanceInfo = await action.checkERC20Balance(paramOptions);
-            const walletAddress = walletProvider.getAddress();
+            const walletAddress = runtime.walletAddress;
 
             if (callback) {
                 callback({

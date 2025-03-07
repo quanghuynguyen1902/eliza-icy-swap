@@ -16,8 +16,9 @@ import {
 import { apiClient } from "@/lib/api";
 import { NavLink, useLocation } from "react-router";
 import type { UUID } from "@elizaos/core";
-import { Book, Cog, User } from "lucide-react";
+import { Book, Cog, User, Wallet } from "lucide-react";
 import ConnectionStatus from "./connection-status";
+import { ConnectKitButton } from "connectkit";
 
 export function AppSidebar() {
     const location = useLocation();
@@ -64,7 +65,9 @@ export function AppSidebar() {
                                 <div>
                                     {Array.from({ length: 5 }).map(
                                         (_, _index) => (
-                                            <SidebarMenuItem key={"skeleton-item"}>
+                                            <SidebarMenuItem
+                                                key={"skeleton-item-" + _index}
+                                            >
                                                 <SidebarMenuSkeleton />
                                             </SidebarMenuItem>
                                         )
@@ -114,6 +117,29 @@ export function AppSidebar() {
                         <SidebarMenuButton disabled>
                             <Cog /> Settings
                         </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <ConnectKitButton.Custom>
+                            {({
+                                isConnected,
+                                show,
+                                address,
+                                ensName,
+                            }) => {
+                                return (
+                                    <SidebarMenuButton onClick={show}>
+                                        <Wallet />
+                                        {isConnected
+                                            ? ensName ||
+                                              `${address?.slice(
+                                                  0,
+                                                  6
+                                              )}...${address?.slice(-4)}`
+                                            : "Connect Wallet"}
+                                    </SidebarMenuButton>
+                                );
+                            }}
+                        </ConnectKitButton.Custom>
                     </SidebarMenuItem>
                     <ConnectionStatus />
                 </SidebarMenu>
